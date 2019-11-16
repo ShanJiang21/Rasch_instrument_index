@@ -1,0 +1,754 @@
+---
+title: "Rasch_multidimensional"
+author: "Shan Jiang"
+date: "8/28/2019"
+output: 
+  pdf_document:
+     toc: true
+     number_sections: true
+     highlight: tango
+---
+
+```{r echo=TRUE, warnings = FALSE}
+## install.packages("WrightMap")
+library(WrightMap)
+library(Hmisc)
+library(RColorBrewer)
+library(tidyverse)
+## survival pcakge for Mayo Clinic's PBC data
+library(survival)
+```
+
+## Table one
+
+```{r}
+## tableone package itself
+library(tableone)
+
+
+df <-  readxl::read_xlsx("./EFA_coded_0624.xlsx") %>% 
+       mutate(children = 
+                ifelse(Children == "None", 0, Children ) )         
+
+## Vector of variables to summarize
+myVars <- c("Gender", "Age", "Children", "Education",  "HouseholdIncome",
+            "EmploymentStatus" ,  "HomeOwnership", 
+            "Region", "Race",  "HispanicOrigin",   
+            "HH1" , "HH23r1", "HH23r2", "HH23r3", 
+            "Rent", "HH8", "bedroom",  "HH10", "HH11",
+            "HHI", "HH12r1", "HH13r1")
+
+## Vector of categorical variables that need transformation
+catVars <- c("Gender", "Region", "Race","HomeOwnership", "HispanicOrigin")
+
+## Create a TableOne object
+tab2 <- CreateTableOne(vars = myVars, data = df, factorVars = catVars)
+tab2
+
+```
+
+
+
+## Multidimensional item Response model
+
+#### Data import
+
+```{r echo=TRUE }
+library(TAM)
+library(tidyverse)
+# load data
+  data_efa <-  readxl::read_xlsx("./EFA_coded_0624.xlsx") %>% 
+    janitor::clean_names() %>% 
+    mutate(gender = ifelse(gender =="Male", 1, 0)) %>% 
+    mutate(home_ownership = ifelse(home_ownership =="Rent", 0, ifelse(home_ownership =="Own", 1, ""))) %>% 
+    mutate(hispanic_origin = ifelse(hispanic_origin == "No", 0, ifelse(hispanic_origin =="Yes", 1, ""))) 
+  
+
+## Examine item missing pattern 
+  head(data_efa)
+  colSums(is.na(data_efa ))
+
+## Complete data analysis 
+df0 <- data_efa[, c(2:49)] # select item responses
+
+df0  = df0 %>% 
+  select(-c(hec5, hec6))
+
+df_m = df0[complete.cases(df0), ]
+
+
+## Examine individual missing pattern
+row.missing = rowSums(is.na(data_efa[, c(2:49)]))
+row.missing[row.missing >= 1]
+```
+
+## Pairwise correlations and alpha parameters 
+
+```{r}
+
+psych::alpha(df)
+
+a = data_efa[, 2:49]
+a$score = rowSums(data_efa[, 2:49], na.rm = T)
+str(a$score)
+cor.test(a$cep8r1, a$score)
+cor.test(a$hec2r9, a$score)
+
+## Food Insecurity Score 
+b = data_efa[, 75:78]
+b$score = rowSums(b, na.rm = T)
+cor.test(a$score, b$score)
+
+## pairwise correlations(Takes a long time)
+#cor(a, use="complete.obs", method="kendall")
+
+```
+
+731 cases have at least one as missing (30.41%)
+No outliers in the missing pattern.
+
+### PCA: For Unidimension test 
+
+```{r}
+## 32-variable data, 1676 obs:
+the_data = a %>% 
+  select(-c(esc1ar1, esc1ar2, esc1ar5, esc2, eb4, hec4a, hec4b, 
+            hec5, hec6, hec2r3, hec2r4,
+            hec2r9, cep5, cep8r1, cep8r3, cep8r4, score))
+
+c = the_data[complete.cases(the_data),]
+
+pc1 = c %>% 
+  select(eb2a, eb6r1, eb7a, eb8a)
+
+pc2 = c %>% 
+  select(cep1:cep8r2)
+
+pc3 = c %>% 
+  select(hec2r1, hec2r2, hec2r5:hec2r10)
+
+## Load package for PCA
+
+#### Standardize the data (Center and scale).
+
+data.pca <- prcomp(c, center = TRUE, scale. = TRUE)
+summary(data.pca)
+
+data.pca1 <- prcomp(pc1, center = TRUE, scale. = TRUE)
+summary(data.pca1)
+
+data.pca2 <- prcomp(pc2, center = TRUE, scale. = TRUE)
+summary(data.pca2)
+
+data.pca3 <- prcomp(pc3, center = TRUE, scale. = TRUE)
+summary(data.pca3)
+
+res.cov <- cov(pc2)
+round(res.cov,2)
+eigen(res.cov)
+
+```
+
+* I obtained 32 principal components, which you call PC1-32. 
+* Each of these explains a percentage of the total variation in the dataset. That is to say: PC1 explains 24.42% of the total variance, which means that nearly a quarter of the information in the dataset (32 variables) can be encapsulated by just that one Principal Component. 
+* PC2 explains 11% of the variance. 
+* So, by knowing the position of a sample in relation to just PC1 and PC2, you can get a very accurate view on where it stands in relation to other samples, as just PC1 and PC2 can explain 35.94% of the variance.
+* 7-PC can explain 0.5562 variance of all. 
+
+### PCA result plot 
+
+```{r}
+## raw data
+library(ggbiplot)
+
+screeplot(data.pca, type = "l", npcs = 15, 
+          main = "Screeplot of the first 10 PCs")
+abline(h = 1, col="red", lty=5)
+legend("topright", legend=c("Eigenvalue = 1"),
+       col=c("red"), lty=5, cex=0.6)
+
+cumpro <- cumsum(data.pca$sdev^2 / sum(data.pca$sdev^2))
+plot(cumpro[0:15], 
+     xlab = "Number of Principal components", ylab = "Amount of explained variance", 
+     main = "Cumulative variance plot")
+abline(v = 6, col="blue", lty=5)
+abline(h = 0.50, col="blue", lty=5)
+legend("topleft", legend=c("Cut-off @ PC6"),
+       col=c("blue"), lty=5, cex=0.6)
+
+
+ggbiplot(data.pca, alpha = 0)
+ggbiplot(data.pca, labels=rownames(c))
+
+
+data.group <- c(rep("eb", 3), rep("Hec1",4), rep("hec2", 7),rep("hec3", 8),rep("tc",4), rep("cep",8))
+
+ggbiplot(data.pca)
+
+```
+
+
+#### a. Unidimensional models with dichotomous data
+
+* (Model 1) Unidimensional Rasch model without missing data pv imputation
+
+##### Model 01a: Unidimensional Rasch model
+
+```{r}
+# Model 01a: Unidimensional Rasch model
+mod01a <-tam.mml(resp=resp01, irtmodel="1PL" )
+
+# fix item parameters for plausible value imputation
+# (1) fix item intercepts by defining xsi.fixed
+xsi0 <- mod01a$xsi$xsi
+xsi.fixed <- cbind( seq(1,length(xsi0)), xsi0 )
+
+# standard errors
+res1 <- TAM::tam.se(mod01a)
+
+# Compute fit statistics: 15 simulations 
+tam.fit(mod01a)
+
+# Model 02a: Unidimensional Rasch model
+
+# (2) fix item slopes using mod2$B, by matrix of latent regressors food insecurity 
+Y <- data_efa[, c(75:78)]
+mod2a <- TAM::tam.mml( resp= resp01, B=mod01a$B, xsi.fixed=xsi.fixed, Y=Y,
+                pid=data_efa$rnid)
+
+```
+
+#### Model 01b:
+
+```{r}
+#********************************************
+# Model 01b: rasch model with latent regressors, Requires complete cases in Y.
+mod01b <-tam.mml(resp=resp01, irtmodel="1PL",  Y=data_efa[,75:78] )
+
+# Plausible value imputation
+pvmod01b <- TAM::tam.pv(mod01b, nplausible=5, ntheta=2000)
+ # distribution of first plausible value from imputation pv1
+ hist(pvmod01b$pv$PV1.Dim1 )
+ # boxplot of all plausible values from imputation pv2
+ boxplot(pvmod01b$pv[, 2:6 ] )
+# summary output
+  summary(pvmod01b)
+```
+
+# Model 01c: plausible value imputation with normality assumption
+
+```{r}
+    # and ignoring uncertainty about regression coefficients
+    #    -> the default is samp.regr=FALSE
+    pv2c <- TAM::tam.pv( mod01b, nplausible=10, ntheta=500, normal.approx=TRUE )
+    # sampling of regression coefficients
+```
+
+#### b.Multidimensional plausible value imputation
+
+# Model 03a: 3-Multidimensional rasch model
+
+**Multidimensional** 
+    - plausible value imputation
+    - PV imputation has to be adpated for multidimensional case!
+    
+## Loading matrix Q segmentation of dimensions 
+
+```{r}
+# fit three-dimensional Rasch model
+## Set up a matrix 
+Q <- matrix( 0, nrow=48, ncol= 3 )
+Q[2:10,1] <- Q[11:22, 2] <- Q[23:48,3] <- 1
+mod3 <- TAM::tam.mml(data_efa[, 2:49], Q = Q, control=list(maxiter=20, snodes=1000) , 
+                     ndim =3,
+                     constraint="cases")
+
+# Wright map using PV (the default)
+IRT.WrightMap( mod1, prob.lvl=.65, type="PV" )
+
+# Wright map using population distribution
+IRT.WrightMap( mod1, prob.lvl=.65, type="Pop" )
+```
+
+    
+```{r}
+# Model 03a: rasch model
+mod03a <- TAM::tam.mml(resp=resp01, 
+                       Q = Q, 
+                       Y=data_efa[,75:78], 
+                       control=list(maxiter=15))
+  
+tam.mml.pv(mod01a, nplausible= 5, # 7 plausible values
+                   samp.regr=TRUE )      # sampling of regression coefficients 
+
+# fix item parameters for plausible value imputation
+# (1) item intercepts = xsi.fixed
+xsi0 <- mod01a$xsi$xsi
+xsi.fixed <- cbind( seq(1,length(xsi0)), xsi0 )
+
+# (2) item slopes = mod2$B, by matrix of latent regressors female, hisei and migra
+Y <- data_efa[, c(75:78)]
+mod2a <- TAM::tam.mml( resp= resp01, B=mod01a$B, xsi.fixed=xsi.fixed, Y=Y,
+                pid=data_efa$rnid)
+
+```
+
+
+#### original data analysis 
+
+```{r echo=TRUE, warning=FALSE}
+# fit Rasch model
+set.seed(200)
+mod1 <- TAM::tam.mml(resp = c)
+
+
+#### Only Item difficulty 
+mod1$xsi
+difficulties = mod1$xsi$xsi
+hist(difficulties)
+mean(difficulties)
+
+## person ability -wle estimates
+ability <- tam.wle(mod1)
+##  WLE Reliability= 0.732
+
+# default wrightMap plots
+WrightMap::wrightMap( difficulties, label.items=c(1:32) )
+
+# stack all items below each other
+thr.lab.text <- matrix( "", 1, ncol(df) )
+thr.lab.text[1,] <- colnames(df)
+WrightMap::wrightMap( difficulties, t(thr), label.items=c("items"),
+thr.lab.text=thr.lab.text, show.thr.sym=FALSE )
+
+## Item difficulty map
+hist(difficulties, xlim= c(-0.1, 4), breaks= 20)
+
+```
+
+
+#### b. fit three-dimensional Rasch model
+
+using an optional I × D matrix (the Q-matrix) which specifies the loading structure
+of items on dimensions.
+
+```{r}
+## Set up a matrix 
+Q <- matrix( 0, nrow=32, ncol= 3 )
+Q[1:4,1] <- Q[5:25,2] <- Q[26:32,3] <- 1
+mod2 <- TAM::tam.mml(c, Q = Q, 
+                     control=list(maxiter=20, snodes=1000) , 
+                     ndim =3,
+                     constraint="cases")
+summary(mod2)
+
+diff2 = mod2$xsi
+
+# compute WLE
+wlemod2 <- TAM::tam.wle(mod2)$theta
+# extract thresholds
+tmod2 <- TAM::tam.threshold( mod2, prob.lvl=.625 )
+
+
+# create Wright map
+c1 <- matrix( c( rep(1,4), rep(2,21), rep(4,7)), ncol=1 )
+WrightMap::wrightMap( thetas=wlemod2,
+                      thresholds=tmod2, 
+                      label.items.srt=-90)
+
+
+```
+
+
+#### c. Fit a seven-dimensional Rasch model
+
+quasi-Monte Carlo is used  Pan and Thompson (2007).
+
+```{r}
+## Set up a matrix:
+ ## define Q-matrix for testlet and subdimension models estimated below
+p <- matrix( 0, nrow=32, ncol= 7 )
+p[1:2,1] <- p[3:4,2] <- p[5:8,3] <- p[9:15,4] <- p[16:23,5] <- p[24:25,6] <- p[26:32,7] <- 1
+
+## EAP： 0.569 0.554 0.716 0.707 0.760 0.710 0.714 
+
+## Set up QMC with 2000 stochastic nodes
+mod3 <- TAM::tam.mml(c, Q = p, 
+                     control=list(maxiter=20, snodes=1500,QMC=TRUE),
+                     constraint="cases")
+
+# compute WLE
+wlemod3 <- TAM::tam.wle(mod3)$theta
+
+#difficulty
+diff3 = mod3$xsi$xsi
+
+## Theta and difficulty 
+thr3 <- TAM::tam.threshold(mod3)
+
+## ... your plotting code here ...
+theta = mod3$theta
+
+WrightMap::wrightMap(theta, thr3, item.prop = 0.58,
+                     type="PV", show.thr.lab = FALSE,
+                     label.items.srt= -90,
+                     dim.names = c("EB", "EA", "HS", 
+                                   "NR","HE", "TC" ,"CS"),
+                     dim.color = brewer.pal(7, "Set1"),
+                     thr.sym.col.bg = rep(brewer.pal(7, "Set1"), 
+                                          c(2, 2, 4, 6, 8, 2, 8)),
+                     thr.sym.col.fg = rep(brewer.pal(7, "Set1"), 
+                                          c(2, 2, 4, 6, 8, 2, 8)),
+                     thr.sym.cex = 1)
+
+                       # use.hist = FALSE
+hist(diff3, xlim= c(-1, 4.5), breaks= 20)
+
+
+# true score conversion
+tmod3 <- TAM::IRT.truescore( mod3 )
+round( tmod3, 4 )
+
+## weighted correlation matrix
+ corr(c(c[, 1:2], c[, 3:4]))
+
+```
+
+###### Model local fit
+
+```{r}
+
+### # based on posterior
+fit3 <- TAM::tam.fit(mod3)
+res3.1 <- TAM::msq.itemfit(mod3)
+
+### # based on WLEs
+res3.2 <- TAM::msq.itemfitWLE( mod3 )
+
+# plot expected response curves
+plot( mod3, ask=TRUE )
+
+fit3.3 <- TAM::msq.itemfit(mod3)
+summary( fit3.3 )
+
+
+```
+
+#### WrightMap
+
+```{r}
+WrightMap::wrightMap(diff3,prob.lvl=.65, 
+                     type="PV", 
+                     label.items=colnames( mod1$resp),
+                     label.items.srt=-90)
+```
+
+### Comparison of Uni-dimensional model and multidimensional model 
+
+```{r}
+anova(mod1, mod2)
+anova(mod2, mod3)
+anova(mod3, mod1)
+```
+
+### Seven-dimensional Rasch Model Estimation 
+
+```{r}
+## fit statistics assessed
+fmod3 = TAM::tam.modelfit.IRT(mod3)
+summary( fmod3 )
+
+## Infit and outfit statistics 
+msq.itemfit(mod3, fitindices=NULL)
+
+mean(fit$residuals)
+
+## Write out the item parameters 
+a = mod3$item
+write.csv(a, "item.csv")
+
+person = mod3$person
+write.csv(person, "person.csv")
+
+sqrt(mod3$variance)
+
+summary(mod3)
+
+ability <- tam.wle(mod3)
+summary(ability)
+
+## Score 
+ggplot(person, aes(x= score)) + 
+  geom_density(alpha= 0.9) +
+  geom_histogram(color="darkblue", fill="lightblue") +
+  labs(title="Score histogram plot", y = "Count")+
+  theme_classic()
+
+```
+
+##### Chracteristics of severely in insecured subgroups 
+
+(1) set-up data set 
+
+```{r}
+## Household number 
+sum(is.na(data_efa[, 53]))
+
+dif.df0 =  as.data.frame(data_efa[, 2:74])
+dif.df0$id <- seq.int(nrow(dif.df0))
+
+## Scale 
+dif.m1 = dif.df0 %>% 
+  select(-c(esc1ar1, esc1ar2, esc1ar5, 
+            esc2, eb4, hec4a, hec4b, 
+            hec5, hec6, hec2r3, hec2r4, 
+            hec2r9, hec2r10,
+            cep5, cep7, 
+            cep8r1:hh13r1 ))
+
+dif.m = dif.m1[complete.cases(dif.m1),]
+dif.m$raw_score <- rowSums(dif.m[,1:29])
+table(dif.m)
+
+## Indicators
+dif.n = dif.df0 %>% 
+  select(c(gender:id))
+
+## new datasets for dif-including all indictors and scale
+dif.df2 = merge(x = dif.m, y = dif.n, by = "id", all.x = TRUE)
+dim(dif.df2)
+```
+
+(2) T-test and Anova tests 
+
+```{r}
+## Energy Insecured Group distribution
+person1 = dif.df2%>% 
+            mutate(score = raw_score)
+
+severe = person1 %>% 
+          filter(between(score,  quantile(score, 0.9), quantile(score, 1)))
+
+inse = person1 %>% 
+          filter(!between(score,  quantile(score, 0.9), 
+                          quantile(score, 1)))
+## check the boundary 
+nrow(severe) + nrow(inse)
+
+
+## Average score of severe insecure people 
+mean(severe$score)
+
+## Average score of severe insecure people 
+mean(inse$score)
+
+## T-test- conducted in STATA
+write.csv(person1, "test_dif.csv")
+```
+
+
+#### Differential item functioning
+
+```{r}
+# select items
+items <- dif.df[, 2:30]
+# extract values of the gender variable into a variable called "gender".
+gender <- dif.df[, "gender"]
+
+# computes the test score for each subject by calculating the row sum
+# of each student's scored responses.
+dif.df$raw_score <- rowSums(dif.df[,2:30])
+
+# compute the mean test score for each gender group: 1=male, and 0 = female
+stats::aggregate(dif.df$raw_score,
+                 by=list(gender),FUN=mean)
+
+```
+
+###### By Gender: DIF 
+
+```{r}
+# Facets analysis
+# To conduct a DIF analysis, 
+## we set up the variable "gender" as a facet and
+# re-run the IRT analysis.
+formulaA <- ~item + gender+item*gender # define facets analysis
+facets <- as.data.frame(gender) # data frame with student covariates
+
+# facets model for studying differential item functioning
+mod3.2 <- TAM::tam.mml.mfr( resp =  dif.df[,2:30], 
+                            facets= facets, 
+                            formulaA = formulaA)
+summary(mod3.2)
+```
+
+
+###### By age: DIF 
+
+```{r}
+# Facets analysis
+# To conduct a DIF analysis, 
+## we set up the variable "gender" as a facet and
+# re-run the IRT analysis.
+age <- dif.df[, "age"]
+formulaA <- ~item + age + item * age # define facets analysis
+facets <- as.data.frame(age) # data frame with student covariates
+
+# facets model for studying differential item functioning
+mod3.3 <- TAM::tam.mml.mfr( resp =  dif.df[,2:30], 
+                            facets= facets, 
+                            formulaA = formulaA)
+summary(mod3.3)
+
+```
+
+
+###### By householdNumber:DIF 
+
+```{r}
+# Facets analysis
+# To conduct a DIF analysis, 
+## we set up the variable "gender" as a facet and
+# re-run the IRT analysis.
+no = dif.df[,"numberinhousehold"]
+formulaA <- ~item + no +item*no # define facets analysis
+facets <- as.data.frame(no) # data frame with student covariates
+
+# facets model for studying differential item functioning
+mod3.4 <- TAM::tam.mml.mfr( resp =  dif.df[,2:30], 
+                            facets= facets, 
+                            formulaA = formulaA)
+summary(mod3.4)
+```
+
+
+
+### 7-dimension Consecutive Rasch Model Estimation
+
+```{r}
+
+## Set up QMC with 1000 stochastic nodes
+mod301 <- TAM::tam.mml(c[, 1:2], irtmodel="1PL")
+mean(mod301$person$score)
+mean(mod302$person$score)
+
+mod302 <- TAM::tam.mml(c[, 3:4], irtmodel="1PL")
+
+mod303 <- TAM::tam.mml(c[, 5:8],
+                     irtmodel="1PL")
+
+mod304 <- TAM::tam.mml(c[, 9:15],
+                    irtmodel="1PL")
+
+mod305 <- TAM::tam.mml(c[, 16:23],
+                     irtmodel="1PL")
+
+mod306 <- TAM::tam.mml(c[, 24:25], irtmodel="1PL")
+              
+mod307 <- TAM::tam.mml(c[, 26:32],
+                     irtmodel="1PL")
+
+ability307 <- tam.wle(mod307)
+ability306 <- tam.wle(mod306)
+ability305 <- tam.wle(mod305)
+ability304 <- tam.wle(mod304)
+ability303 <- tam.wle(mod303)
+ability302 <- tam.wle(mod302)
+ability301 <- tam.wle(mod301)
+
+summary(ability307)
+summary(ability302)
+summary(ability303)
+### Correlation test: consecutive test
+cor.test(mod301$person$score, mod302$person$score)
+cor.test(mod302$person$score, mod307$person$score)
+cor.test(mod304$person$score, mod307$person$score)
+cor.test(mod305$person$score, mod307$person$score)
+
+
+```
+
+
+### DIF: Mantel-Haenszel(update 1115/2019)
+
+The Mantel-Haenszel method is a non-parametric approach to DIF.The negative effect size indicates that the item is harder for the focal group, namely, men, mirroring the results from above. The plot gives a compact summary across all items.
+
+```{r}
+#### Differential item functioning
+library(difR)
+
+## call the item data and categorized by gender factor (29-item) 
+tmp1 <- difMH(dif.m[, 1:29], 
+              group = dif.df2$gender, 
+              focal.name = 1)
+tmp1
+
+## Give plots
+plot(tmp1)
+```
+
+Here again item 1, 4, 16, 24, 25, 29 are flagged having significant DIF (p = .002). 
+
+#### Use `difR` By Hispanic Origin 
+
+```{r}
+## call the item data and categorized by gender factor (29-item) 
+tmp2 <- difMH(dif.m[, 1:29], 
+              group = dif.df2$hispanic_origin, 
+              focal.name = 1)
+tmp2
+
+## Give plots:
+plot(tmp2)
+```
+
+
+#### Use `difR` By Rent
+
+```{r}
+## call the item data and categorized by gender factor (29-item) 
+tmp3 <- difMH(dif.m[, 1:29], 
+              group = dif.df2$rent, 
+              focal.name = 1)
+tmp3
+
+## Give plots:
+plot(tmp3)
+```
+
+```{r}
+
+```
+
+
+##### Combine plots 
+
+```{r}
+par(mfrow=c(2,2))
+plot(tmp1)
+plot(tmp2)
+plot(tmp3)
+plot(tmp4)
+```
+
+
+
+
+
+
+
+#### Use the `dif.test` function
+
+```{r}
+library(lordif)
+dif.test(dif.m[, 1:29],  
+         dif.df2$hispanic_origin,  names = NULL, 
+         reference = NULL, 
+         method = "mean-mean",
+         quadrature = TRUE, 
+         nq = 30, DIFtype = NULL, purification = FALSE, 
+         signif.level = 0.05, trace = FALSE, maxiter = 30)
+```
+
+
+
