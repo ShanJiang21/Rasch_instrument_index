@@ -1,0 +1,246 @@
+---
+title: "Table1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Import data 
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(readxl)
+library(quantmod)
+```
+
+#### Frequency 
+
+
+```{r}
+mix = readxl::read_xlsx("./mix_raw.xlsx")
+mix = mix[complete.cases(mix[2:49]) ,]
+
+library(AMR)
+mix %>%
+  freq(HEC3r3a, sort.count = F)
+
+mix %>%
+  freq(HEC3r3b, sort.count = F)
+
+mix %>%
+  freq(HEC3r3c, sort.count = F)
+
+mix %>% 
+   freq(HEC3r3d)
+
+mix %>%
+  freq(HEC3r3e, sort.count = F)
+
+mix %>%
+  freq(HEC3r3f, sort.count = F)
+
+mix %>%
+  freq(HEC3r3g, sort.count = F)
+mix %>%
+  freq(HEC3r3h, sort.count = F)
+
+mix %>%
+  freq(HEC1r1a, sort.count = F)
+
+mix %>%
+  freq(HEC1r1b, sort.count = F)
+mix %>%
+  freq(HEC1r1c, sort.count = F)
+mix %>%
+  freq(HEC1r1d, sort.count = F)
+
+mix %>%
+  freq(HEC5, sort.count = F)
+
+mix %>%
+  freq(HEC6, sort.count = F)
+```
+
+
+```{r}
+data = readxl::read_xlsx("./impute_48.xlsx")
+
+df = data[complete.cases(data[2:49]) ,]
+
+## Keep only the complete cases
+a = colSums(is.na(df ))
+df2 = data[complete.cases(data[2:69]) ,]
+
+## 69% --> 63% (exclude missing values)
+
+
+
+```
+
+
+
+#### Descriptive statistics 
+
+```{r}
+
+## tableone package itself
+library(tableone)
+## survival pcakge for Mayo Clinic's PBC data
+library(survival)
+  
+
+## Vector of variables to summarize
+myVars <- c("Gender", "Age", "Children", "Education",  "HouseholdIncome",
+            "EmploymentStatus" ,  "HomeOwnership", "Region", "Race",  "HispanicOrigin",   
+            "HH1" , "HH23r1", "HH23r2", "HH23r3", 
+            "Rent", "HH8", "bedroom",  "HH10", "HH11",
+            "HHI", "HH12r1", "HH13r1")
+
+## Vector of categorical variables that need transformation
+catVars <- c("Gender", "Region", "Race","HomeOwnership", "HispanicOrigin")
+
+## Create a TableOne object
+tab2 <- CreateTableOne(vars = myVars, data = df, factorVars = catVars)
+tab2
+
+```
+
+```{r}
+library(moments)
+item = df[, 2:49]
+skewness(item)
+kurtosis(item)
+
+library(fBasics)
+m = basicStats(item, ci = 0.95)
+write.csv(m, "stats.csv")
+
+median(df$HH13r1, na.rm = T)
+```
+
+### Alpha: Original levels 
+```{r}
+df =df %>% 
+  mutate(ESC1ar1 = as.numeric(ESC1ar1)) %>% 
+  mutate(ESC1ar2 = as.numeric(ESC1ar2)) %>% 
+  mutate(ESC1ar5 = as.numeric(ESC1ar5)) 
+
+psych::alpha(df[, 2:4])
+psych::alpha(df[, c( 5, 6, 7, 8, 9, 10)])
+
+# Energy Burden
+psych::alpha(df[, c(11:14)]) 
+psych::alpha(df[, 15:24]) 
+psych::alpha(df[,c(33, 34, 36, 38)])
+
+# Efficiency and Subjective Well-being  
+
+# III. 
+psych::alpha(df[, c(35,37, 25:32,15:24 )]) 
+psych::alpha(df[, 38:48]) # Coping Strategy 
+psych::alpha(df[, 2:49])
+```
+
+
+### Construct validity 
+
+```{r}
+df.1 = df %>% 
+  select(-c(ESC1ar5, EB4, HEC4a, HEC4b,CEP8r3, CEP8r4, HEC2r2, HEC2r3, HEC2r9)) 
+  
+score1 = rowSums(df.1[, 2:40])
+score2 = rowSums(df.1[, 66:69])
+
+cor.test(score1, score2)
+
+## Negative wording in the food insecurity proves valid. 
+```
+
+```{r}
+library(moments)
+skewness(df[, 2:49])
+```
+
+## Rasch model 
+```{r}
+library("eRm")
+library("ltm")
+library("TAM")
+library("difR")
+
+
+res_rm_1 <- RM(df.1[, 2:40])
+
+# res_rm_1                   # Short summary of item parameters
+# summary(res_rm_1)          # Longer summary of item parameters
+betas <- -coef(res_rm_1)     # Item difficulty parameters
+round(sort(betas), 2)
+
+
+mod1 <- tam(df.1[, 2:40])
+## Item difficulty 
+mod1$xsi
+itemdiff <- mod1$xsi$xsi
+itemdiff 
+
+## Ability 
+ability <- tam.wle(mod1)
+ability
+persona<- ability$theta
+
+### Descriptive stats
+hist(itemdiff)
+hist(persona)
+mean(itemdiff)
+sd(itemdiff)
+mean(persona)
+sd(persona)
+
+## Model Fit 
+Fit <- tam.fit(mod1)
+plot(mod1)
+
+## Mean Squared Residual Based Item Fit Statistics (Infit, Outfit)
+#***** item fit for each item
+# based on posterior
+res.1 <- TAM::msq.itemfit( mod1 )
+summary(res.1)
+# based on WLEs
+res2 <- TAM::msq.itemfitWLE( mod1 )
+summary(res2)
+
+
+#***** item fit for item groups
+# define item groups
+fitindices <- substring( colnames(df.1[, 2:40]), 1, 4)
+# based on posterior
+res3 <- TAM::msq.itemfit( mod1, fitindices )
+summary(res3)
+# based on WLEs
+res4 <- TAM::msq.itemfitWLE( mod, fitindices )
+summary(res4)
+
+## Person fit 
+tam.personfit(mod1)
+
+```
+
+
+### Plots for Items 
+
+```{r}
+plotICC(res_rm_1, item.subset = "EB8a")
+abline(v = -0.18, col = "grey")
+abline(h = .5, col = "grey")
+```
+
+```{r}
+
+lrt_1 <- LRtest(res_rm_1, splitcr = df$Gender)
+plotGOF(lrt_1, conf = list(), tlab = "number",
+        xlab = "Women", ylab = "Men")
+```
+
