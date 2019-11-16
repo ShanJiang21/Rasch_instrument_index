@@ -1,0 +1,507 @@
+---
+title: "Energy Insecurity Scale"
+author: "Shan"
+date: "March 24, 2019"
+output: html_document
+---
+
+```{r, message=FALSE, warning=FALSE}
+library(xlsx)
+library(tidyverse)
+require(cowplot)
+library(tableone)
+
+```
+
+```{r}
+## read in data of energy questionaire 
+energy.raw = read.xlsx(file= "C:\\Users\\PubLibrary\\Desktop\\home_energy_data.xlsx", 
+         sheetName = "A1")
+
+## read in data of demographics
+demo.raw = read.xlsx(file= "C:\\Users\\PubLibrary\\Desktop\\Demographic_comple.xlsx", 
+         sheetName = "SPLUS-4300")
+
+```
+
+
+```{r}
+## mean imputation 
+
+##### Imputation of winter/summer bills for electricity #####
+
+energy.raw$ESC1br1c1[is.na(energy.raw$ESC1br1c1)] <- mean(energy.raw$ESC1br1c1, na.rm = TRUE)
+energy.raw$ESC1cr1c1[is.na(energy.raw$ESC1cr1c1)] <- mean(energy.raw$ESC1cr1c1, na.rm = TRUE)
+
+
+
+##### Categorize to dichotomous variable by using mean as cut-off point 
+energy.raw$ESC1br1c1 <- cut(energy.raw$ESC1br1c1,
+                     breaks=c(-Inf, 127, Inf),
+                     labels=c("low","high"))
+
+energy.raw$ESC1cr1c1 <- cut(energy.raw$ESC1cr1c1,
+                     breaks=c(-Inf, 140, Inf),
+                     labels=c("low","high"))
+
+
+## data manipulation 
+energy.raw = energy.raw %>% 
+    filter(HEC5 != 8) %>% 
+    filter(HEC6 != 8) %>% # 2344 after filter the missing of HEC5 and HEC6
+    filter( EB5r1 != c(3, 4)) %>% 
+    filter( EB6r1 != c(3, 4)) %>% 
+    ## 1887 for filtering the EB6r1
+
+## Energy Burden: recode for severity and same direction of EI scale
+recode(energy.raw$ESC2, "2" = "0", "1" = "1" )
+recode(energy.raw$EB2a, "2" = "0" , "1" = "1" )
+recode(energy.raw$EB2b, "2" = "0" , "1" = "1")
+recode(energy.raw$EB4, "2" = "0" , "1" = "1")
+recode(energy.raw$EB5r1, "2" = "0" , "1" = "1") ## additional steps 
+recode(energy.raw$EB6r1, "2" = "0" , "1" = "1")
+recode(energy.raw$EB7a, "2" = "0" , "1" = "1")
+recode(energy.raw$EB7b, "2" = "0" , "1" = "1")
+recode(energy.raw$EB7d, "2" = "0" , "1" = "1")
+recode(energy.raw$EB8a, "2" = "0" , "1" = "1")
+recode(energy.raw$EB8b, "2" = "0" , "1" = "1")
+recode(energy.raw$EB8d, "2" = "0" , "1" = "1")
+
+## Housing satisfaction to 2 levels : 0-1
+recode(energy.raw$HEC1r1a, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+recode(energy.raw$HEC1r1b, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+recode(energy.raw$HEC1r1c, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+recode(energy.raw$HEC1r1d, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+
+## HEC2r10: Repair need Yes = 1, 
+
+recode(energy.raw$HEC2r10,  "1" = "0", "0" = "1")
+
+## Efficiency: Lighting to Plumbing 
+
+recode(energy.raw$HEC3r3a, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+recode(energy.raw$HEC3r3a, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+recode(energy.raw$HEC3r3c, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+recode(energy.raw$HEC3r3d, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+recode(energy.raw$HEC3r3e, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+recode(energy.raw$HEC3r3f, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+recode(energy.raw$HEC3r3g, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+recode(energy.raw$HEC3r3h, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+
+
+# Temprature manipulation 
+recode(energy.raw$HEC4a, "1" = "1", "2" = "0")
+recode(energy.raw$HEC5, "1" = "1", "2" = "1", "6" = "1", "7" = "1", "3" = "0",  "4" = "0", "5" = "0")
+recode(energy.raw$HEC6, "1" = "1", "2" = "1", "6" = "1", "7" = "1", "3" = "0",  "4" = "0", "5" = "0")
+
+recode(energy.raw$HEC5a, "1" = "1", "2" = "0")
+recode(energy.raw$HEC6a, "1" = "1", "2" = "0")
+
+
+## Energy literacy 
+recode(energy.raw$EL1, "1" = "1", "2" = "0", "3" = "1", "4" = "1")
+recode(energy.raw$EL2, "1" = "1", "2" = "1", "3" = "0", "4" = "1")
+recode(energy.raw$EL3, "1" = "1", "2" = "1", "3" = "1", "4" = "0", "5" = "0" ) 
+
+
+## Energy and Health 
+recode(energy.raw$EH1a_er1a,  "1" = "0", "2" = "0", "3" = "0", "4" = "1", "5" = "1" ) 
+recode(energy.raw$EH1a_er2b,  "1" = "0", "2" = "0", "3" = "0", "4" = "1", "5" = "1" ) 
+recode(energy.raw$EH1a_er3c,  "1" = "0", "2" = "0", "3" = "0", "4" = "1", "5" = "1" )
+recode(energy.raw$EH1a_er4d,  "1" = "0", "2" = "0", "3" = "0", "4" = "1", "5" = "1" ) 
+recode(energy.raw$EH1a_er5e,  "1" = "0", "2" = "0", "3" = "0", "4" = "1", "5" = "1" )
+
+
+```
+
+
+```{r}
+## Explanatory Variables 
+poly_df = energy.raw %>% 
+  select(rnid, EL3, 
+         HEC5, HEC6, 
+         HEC4a, HEC4b, HEC5a, HEC6a, HEC1r1a,
+         HEC1r1b, HEC1r1c, HEC1r1d, 
+         EH1a_er1a, EH1a_er2b, EH1a_er3c, EH1a_er4d,EH1a_er5e, 
+         HEC3r3a, HEC3r3b,HEC3r3c, HEC3r3d, HEC3r3e, HEC3r3f, HEC3r3g, HEC3r3h)
+
+poly.w = poly_df[complete.cases(poly_df), ]
+
+## Missing: ESC2, EB2a, EB2b, EB2c,EB2d, EB2e,EB3a,EB3b,EB3c,EB3d
+dicho_df = energy.raw %>% 
+  select(rnid, 
+         CEP1,CEP2,CEP3,CEP4,CEP5, CEP6, CEP7, 
+         EH2, HEC2r1, HEC2r2,HEC2r3, HEC2r4,HEC2r5,HEC2r6,HEC2r7,HEC2r8,HEC2r9, HEC2r10)
+
+dicho.w = dicho_df[complete.cases(dicho_df), ]  
+
+## Seperate the health status data: leaving 12 variables. 
+soc_df = demo.raw %>%
+  mutate(rnid = RNID) %>% 
+  select(-RNID, -c(13:45)) 
+
+## health status data
+heastatus_df = demo.raw %>%
+  mutate(rnid = RNID) %>% 
+  select(-RNID, -c(2:12))
+
+data_df = merge(poly.w, dicho.w, by = "rnid")
+energy_raw =  merge(data_df, soc_df, by = "rnid")
+
+## Missing data distribution 
+colSums(is.na(energy_raw))[43:53] 
+energy = na.omit(energy_raw)
+
+
+```
+
+## Ruled out the self-determined missing data
+
+```{r}
+energy.new = energy %>%
+  filter(Race != "DO NOT USE",
+         Race != "Prefer not to answer",
+         Hispanic.Origin != "Prefer Not to Answer") %>% 
+  filter(Children != "Prefer not to state") %>% 
+  filter(Education != "Prefer not to answer") %>% 
+  filter(Household.Income != "Prefer not to answer") %>% 
+  filter(is.na(Household.Income) == F ) %>% 
+  filter(Household.Income != "None of the above") %>% 
+  filter(Employment.Status != "None of the above") %>% 
+  mutate(Hispanic = factor(Hispanic.Origin, levels = c("No","Yes") ),
+         Household.Income = factor(Household.Income, 
+  levels = c("< 15,000","15,000 to 24,999", "25,000 to 49,999", "50,000 to 74,999","75,000 to 99,999", "100,000 to 149,999" , "150,000 to 199,999", "200,000 to 249,999", "250,000 to 499,999", "500,000 to 999,999","1 million +" )))
+
+
+## 341 missing values in Household income
+energy.new = energy.new %>% 
+  drop_na() %>%
+  mutate(Education = fct_recode(Education, 
+                                "Low" = "Prefer not to answer", ## remove the levels
+        "Low" = "Incomplete Secondary (high school) Education", 
+        "Low" =  "Secondary (high school) Education",
+         "Medium" = "Vocational or Technical Degree",
+         "Medium" = "Some College, University, Technical School or Further Education" , 
+        "Medium" = "Associate's Degree",
+         "High" = "Bachelor's Degree", 
+        "High" = "Master's Degree", 
+         "High" = "Doctoral or Professional Degree (PhD, Ed.D, JD, DVM, DO, MD, DDS, or similar)")
+        ) %>% 
+  select(-Hispanic.Origin)
+  
+## Recode the dichotomous levels 
+
+          
+
+## missing rate 
+nrow(energy.new)
+Miss_rate = (2046 - nrow(energy.new)) /2046
+Miss_rate
+```
+
+## Distribution of data: after adjustment of NAs 
+
+```{r}
+theme_set(theme_cowplot(font_size= 10.5)) # reduce default font size
+
+plot.before = ggplot(energy_raw, aes(x = Number.in.household. )) +
+  geom_bar(alpha=.4, na.rm = FALSE, aes(fill = Number.in.household. )) +
+  geom_density(alpha=.6, fill="#FF6666")+
+  theme(axis.text.x = element_text(angle=70, vjust=0.5))
+
+plot.after = ggplot(energy.new, aes(x = Number.in.household. )) +
+  geom_bar(alpha=.4, na.rm = FALSE, stat = "count", aes(fill = Number.in.household. )) +
+  geom_density(alpha=.6, fill="#FF6666") +
+  theme(axis.text.x = element_text(angle=70, vjust=0.5))
+
+plot_grid(plot.before, plot.after, labels = c('Before', 'After'), align = 'h', 
+          label_colour = "blue")
+```
+
+## Table 1: Descriptive social demographical 
+
+(1) Table 1 
+```{r}
+
+# Create a variable list which we want in Table 1:"No.in household", "Household Income", "Employment Status","Home Ownership"
+
+listVar <- c("Age", "Region", "Race", "Education", 
+             "Children",  "Gender",
+             "Number.in.household.", 
+             "Household.Income", "Employment.Status", "Home.Ownership" )
+
+# Define categorical variables
+catVar <- c("Region", "Race",  
+             "Children", 
+             "Number.in.household.", 
+             "Household.Income", "Employment.Status", "Home.Ownership")
+
+# Total Population
+table1 <- CreateTableOne(vars = listVar, data = energy.new, 
+                         strata = c("Hispanic"),
+                         factorVars = catVar,
+                         includeNA = FALSE)
+table1
+
+```
+
+## Data Visulization 
+
+```{r}
+energy %>%
+  
+
+ggplot(energy, aes(x = Number.in.household. )) +
+  geom_bar(alpha=.4, na.rm = FALSE, stat = "count", aes(fill = Number.in.household. )) +
+  geom_density(alpha=.6, fill="#FF6666") +
+  theme(axis.text.x = element_text(angle=70, vjust=0.5))
+```
+
+## mesurement for energy insecurity 
+
+1. Measurement scales are grouped into four different types:
+
+* Nominal;
+* Ordinal;
+* Interval;
+* Ratio. 
+
+
+2. Scoring
+
+As the energy insecurity is mainly focused on cognitive and noncognitive, that is, affective, test scores as operationalizations of constructs in education and psychology. As noted above, these test scores often produce ordinal scales with some amount of meaning in their intervals. 
+
+The particular rules for assigning values within these scales depend on the type of scoring mechanisms used.Two scoring mechanisms or rules, dichotomous and polytomous scoring, and we'll discuss how these are used to create rating scales and composite scores.
+
+
+2.1 Dichotomous scoring
+
+
+Dichotomous scoring refers to the assignment of one of two possible values based on a person's performance or response to a test question. 
+
+A simple example is the use of Yes and NO to score a cognitive item response. These values are mutually exclusive, statements are written to capture some feature of the construct, such as temprature of apartment, and individuals then indicate whether or not the statements are characteristic of them.
+
+Multiple-choice questions, are usually scored dichotomously. Most cognitive tests involve at least some dichotomously scored items. Our study implemented both dichotomously and polytomously scored items.
+
+
+2.2 Polytomous scoring 
+
+Polytomous scoring simply refers to the assignment of three or more possible values for a given test question or item. In cognitive testing, a simple example is the use of rating scales to score responses in likert inventory, from very unlikely to likely, very unsatisfied to satisfied, with differing levels of satisfaction.
+
+Most of our questionaires have been contributed to four different composite scales. 
+
+2.3 Rating scales
+
+There are two methods for combining scores across multiple rating scale items to create a composite score that would be, in theory, a stronger measure of the construct than any individual item.
+
+One of these methods, which has become a standard technique in affective measurement, is to assign ordinal numerical values to each rating scale category, and then calculate a sum or average across a set of these rating scale items.
+
+```{r}
+## Scaling items on purpose 
+energy.new 
+
+
+
+```
+
+
+2.4 Composites versus components
+
+A composite score is simply the result of some combination of separate subscores, referred to as components.
+
+Factor scores refer to scores obtained from some measurement model, such as a classical test theory model. 
+
+
+3. Measurement models
+
+Measurement models represent an unobservable construct by formally incorporating a measurement theory into the measurement process:
+
+*  confirmatory factor analysis models;
+
+
+4. Score referencing
+
+4.1 Norm referencing
+
+* Norm referencing gives meaning to scores by comparing them to values for a specific norm group;
+* Boxplot; 
+
+4.2 Criterion referencing
+
+The main limitation of norm referencing is that it only helps describe performance relative to other test takers. Criterion score referencing does the opposite. Criterion referencing gives meaning to scores by comparing them to values directly linked to the test content itself, regardless of how others perform on the content (Popham and Husek 1969).
+
+### measurement models: EFA
+
+Steps in EFA
+
+1. Choose the number of factors
+```{r}
+# Prepping learning data for EFA
+# Vectors of item names for economic, , and
+# strategies
+
+# There are in total 42 items 
+
+HECitems <- c("HEC5","HEC6","HEC4a", "HEC4b", "HEC5a", "HEC6a",
+              "HEC1r1a" , "HEC1r1b", "HEC1r1c" ,  "HEC1r1d",
+              "HEC2r1", "HEC2r2" , "HEC2r3", "HEC2r4", "HEC2r5" , "HEC2r6" , "HEC2r7" ,  "HEC2r8" ,  "HEC2r9" , "HEC2r10",
+              "HEC3r3a",    "HEC3r3b" ,    "HEC3r3c" ,   "HEC3r3d" ,
+              "HEC3r3e" ,  "HEC3r3f" ,"HEC3r3g", "HEC3r3h" )
+
+CEpitems <- c("CEP1", "CEP2", "CEP3" ,"CEP4", "CEP5","CEP6", "CEP7" )
+
+EHtems <- c( "EH2" , "EL3",
+             "EH1a_er1a", "EH1a_er2b" ,"EH1a_er3c",  "EH1a_er4d","EH1a_er5e")
+
+
+alitems <- c(HECitems, CEpitems, EHtems)
+
+# Fit EFA with Three factors
+alefa3 <- fastudy(energy.new[, alitems], factors = 3)
+
+
+# Fit EFA with four factors
+alefa4 <- fastudy(energy.new[, alitems], factors = 4)
+
+
+# Fit EFA with  Five factors
+alefa5 <- fastudy(energy.new[, alitems], factors = 5)
+
+# Fit EFA with  Six factors
+
+alefa6 <- fastudy(energy.new[, alitems], factors = 6)
+
+
+# Print results, rounding and filtering loadings
+print(alefa5, digits = 2, cutoff = 0.3)
+```
+
+
+2. Prepare the data and fit the model
+```{r}
+# Print uniquenesses, and check sum of squared loadings
+round(alefa5$uniquenesses, 2)
+
+round(rowSums(alefa5$loadings^2) + alefa5$uniquenesses, 2)
+```
+3. Examine factor loadings
+
+4. Evaluate factor quality
+
+Evaluate factors
+
+The factor loadings tend to support the alignment of the approaches to learning items into their corresponding scales. However, the results also show that many of the items are related to more than just the scales they were written for. This could be due to the fact that the three factors measure related components of a broader learning strategies construct. Correlations between the IRT theta scores for each scale are all moderately positive, suggesting overlap in what the scales are measuring.
+
+
+```{r}
+# Correlations between
+# Plot of approaches to learning eigenvalues
+plot(alefa5, ylim = c(0, 6))
+```
+
+The scree plot for the Approaches to Learning EFA with three factors resembles more of a plain than a cliff edge. The eigenvalues are all above 1, which is sometimes used as a cutoff for acceptability. They're also all nearly equal.
+
+With other types of tests where one or two strong underlying constructs are present, the scree effect will be more apparent. 
+
+
+### 5. Confirming our factor structure
+we pick up f = 5 model. 
+
+## Steps in CFA
+
+Here, we will fit the final model, while demonstrating the following basic steps in conducting a CFA:
+
+1. hypothesizing the proposed factor structure with necessary constraints,
+2. preparing our data and fitting the CFA model,
+3. evaluating the model and statistically testing for model fit,
+4. revising the model, comparing to more or less complex models, and repeating evaluation and testing of fit as needed.
+
+```{r}
+library(lavaan)
+cfa_data = energy.new %>% 
+  select(HEC1r1a, HEC1r1b, HEC1r1c, HEC1r1d, HEC3r3a, HEC3r3b, HEC3r3c, HEC3r3d, HEC3r3e, HEC3r3f, HEC3r3g, HEC3r3h, HEC5a, HEC6a, HEC2r3, CEP1, CEP2, CEP3, CEP4, CEP5, CEP6, CEP7, EH2, HEC2r1 ,HEC2r2 ,HEC2r4, HEC2r5, HEC2r6, HEC2r7, HEC2r8, EH1a_er1a, EH1a_er2b, EH1a_er3c, EH1a_er4d, EH1a_er5e, HEC2r10)
+
+enermod <- lavaanify(model = "
+  # Latent variable definitions
+  efficiency =~ HEC1r1a +  HEC1r1b + HEC1r1c+ HEC1r1d
+               + HEC1r1a + HEC1r1b + HEC1r1c+ HEC1r1d +
+HEC3r3a + HEC3r3b + HEC3r3c + HEC3r3d + HEC3r3e +  HEC3r3f+ HEC3r3g + HEC3r3h
+  cope_strategy  =~ HEC5a + HEC6a +   HEC2r3 +  CEP1  +  CEP2 +  CEP3 +  CEP4 +  CEP5+  CEP6 + CEP7  + EH2
+
+  EH =~ HEC2r1 + HEC2r2 + HEC2r4 + HEC2r5 +  HEC2r6 + HEC2r7 + HEC2r8 +
+EH1a_er1a +EH1a_er2b + EH1a_er3c + EH1a_er4d + EH1a_er5e
+  
+  housing_burden =~ HEC2r1 + HEC2r2 + HEC2r4 + HEC2r8 + HEC2r10  
+
+   HEC =~ HEC1r1a + HEC1r1b  + HEC1r1c + HEC1r1d",
+  auto.var = TRUE, auto.cov.lv.x = TRUE, std.lv = TRUE)
+
+## Covariance matrix 
+s = cov(cfa_data)
+
+# Fit the model
+enecfa <- cfa(enermod, sample.cov = s,
+  sample.nobs = 1669)
+
+# Print fit indices, loadings, and other output
+summary(enecfa, fit = TRUE, standardized = TRUE)
+
+
+```
+
+
+4. Revise as needed
+
+The discouraging CFA results may inspire us to modify our factor structure in hopes of improving model fit. Potential changes include the removal of items with low factor loadings, the correlating of more or fewer error terms, and the evaluation of different numbers of factors. Having fit multiple CFA models, we can then compare fit indices and look for relative improvements in fit for one model over another.
+
+Let's quickly examine a CFA where all items load on a single factor. We no longer have correlated error terms, and item errors are again added automatically. We only specify the loading of all items on our single factor, labeled depression.
+
+```{r}
+enermod2 <- lavaanify(model = "
+  # Latent variable definitions
+  efficiency =~ HEC1r1a +  HEC1r1b + HEC1r1c+ HEC1r1d
+               + HEC1r1a + HEC1r1b + HEC1r1c+ HEC1r1d +
+HEC3r3a + HEC3r3b + HEC3r3c + HEC3r3d + HEC3r3e +  HEC3r3f+ HEC3r3g + HEC3r3h
+  cope_strategy  =~ HEC5a + HEC6a +   HEC2r3 +  CEP1  +  CEP2 +  CEP3 +  CEP4 +  CEP5+  CEP6 + CEP7  + EH2
+
+  EH =~ HEC2r1 + HEC2r2 + HEC2r4 + HEC2r5 +  HEC2r6 + HEC2r7 + HEC2r8 +
+EH1a_er1a +EH1a_er2b + EH1a_er3c + EH1a_er4d + EH1a_er5e
+  
+  housing_burden =~ HEC2r1 + HEC2r2 + HEC2r4 + HEC2r8 + HEC2r10  
+
+   HEC =~ HEC1r1a + HEC1r1b  + HEC1r1c + HEC1r1d",
+  auto.var = TRUE,  std.lv = TRUE)
+
+# Fit the model
+enecfa2 <- cfa(enermod2, sample.cov = s,
+  sample.nobs = 1669)
+
+# Print fit indices, loadings, and other output
+summary(enecfa2, fit = TRUE, standardized = TRUE)
+
+```
+
+We can compare fit indices for our two models using the anova() function. This comparison requires that the same data be used to fit all the models of interest. 
+
+```{r}
+# Compare fit for BDI CFA models
+anova(enecfa2, enecfa)
+## Chi Square Difference Test
+## 
+##         Df   AIC   BIC  Chisq Chisq diff Df diff Pr(>Chisq)    
+## enecfa  576 66699 67186 4801.5                                  
+## enecfa2 586 67381 67815 5504.1     702.63      10  < 2.2e-16 ***
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+```
+
+
+we're looking for the model with the smallest value. Smaller AIC and smaller BIC from one model to the next indicate better fit. The chi-square statistic has a p-value associated with it, where a p-value below a certain cutoff such as 0.05 would indicate significantly better fit for one model over another.
+
+
+### Scoring 
+
+
+
+
+

@@ -1,0 +1,116 @@
+---
+title: "0405code"
+author: "Shan"
+date: "4/5/2019"
+output: html_document
+---
+
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+require(cowplot)
+library(tableone)
+library(empr)
+```
+
+```{r}
+## read in data of energy questionaire 
+energy.raw = read.csv(file = "./raw_jan.csv",head = TRUE, sep = ",")
+```
+
+
+```{r}
+## mean imputation 
+
+##### Imputation of winter/summer bills for electricity #####
+
+energy.raw$ESC1br1c1[is.na(energy.raw$ESC1br1c1)] <- mean(energy.raw$ESC1br1c1, na.rm = TRUE)
+energy.raw$ESC1cr1c1[is.na(energy.raw$ESC1cr1c1)] <- mean(energy.raw$ESC1cr1c1, na.rm = TRUE)
+
+
+
+##### Categorize to dichotomous variable by using mean as cut-off point 
+energy.raw$ESC1br1c1 <- cut(energy.raw$ESC1br1c1,
+                     breaks=c(-Inf, 127, Inf),
+                     labels=c("low","high"))
+
+energy.raw$ESC1cr1c1 <- cut(energy.raw$ESC1cr1c1,
+                     breaks=c(-Inf, 140, Inf),
+                     labels=c("low","high"))
+
+
+## data manipulation 
+energy.raw = energy.raw %>% 
+    filter(HEC5 != 8) %>% 
+    filter(HEC6 != 8) %>% # 2344 after filter the missing of HEC5 and HEC6
+    filter( EB5r1 != c(3, 4)) %>% 
+    filter( EB6r1 != c(3, 4)) %>% 
+    ## 1887 for filtering the EB6r1
+
+## Energy Burden: recode for severity and same direction of EI scale
+recode(energy.raw$ESC2, "2" = "0", "1" = "1" )
+recode(energy.raw$EB2a, "2" = "0" , "1" = "1" )
+recode(energy.raw$EB2b, "2" = "0" , "1" = "1")
+recode(energy.raw$EB4, "2" = "0" , "1" = "1")
+recode(energy.raw$EB5r1, "2" = "0" , "1" = "1") ## additional steps 
+recode(energy.raw$EB6r1, "2" = "0" , "1" = "1")
+recode(energy.raw$EB7a, "2" = "0" , "1" = "1")
+recode(energy.raw$EB7b, "2" = "0" , "1" = "1")
+recode(energy.raw$EB7d, "2" = "0" , "1" = "1")
+recode(energy.raw$EB8a, "2" = "0" , "1" = "1")
+recode(energy.raw$EB8b, "2" = "0" , "1" = "1")
+recode(energy.raw$EB8d, "2" = "0" , "1" = "1")
+
+## Housing satisfaction to 2 levels : 0-1
+recode(energy.raw$HEC1r1a, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+recode(energy.raw$HEC1r1b, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+recode(energy.raw$HEC1r1c, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+recode(energy.raw$HEC1r1d, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+
+## HEC2r10: Repair need Yes = 1, 
+
+recode(energy.raw$HEC2r10,  "1" = "0", "0" = "1")
+
+## Efficiency: Lighting to Plumbing 
+
+recode(energy.raw$HEC3r3a, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+recode(energy.raw$HEC3r3a, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+recode(energy.raw$HEC3r3c, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+recode(energy.raw$HEC3r3d, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+recode(energy.raw$HEC3r3e, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+recode(energy.raw$HEC3r3f, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+recode(energy.raw$HEC3r3g, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+recode(energy.raw$HEC3r3h, "1" = "1", "2" = "1", "3" = "0", "4" = "0")
+
+
+# Temprature manipulation 
+recode(energy.raw$HEC4a, "1" = "1", "2" = "0")
+recode(energy.raw$HEC5, "1" = "1", "2" = "1", "6" = "1", "7" = "1", "3" = "0",  "4" = "0", "5" = "0")
+recode(energy.raw$HEC6, "1" = "1", "2" = "1", "6" = "1", "7" = "1", "3" = "0",  "4" = "0", "5" = "0")
+
+recode(energy.raw$HEC5a, "1" = "1", "2" = "0")
+recode(energy.raw$HEC6a, "1" = "1", "2" = "0")
+
+
+## Energy literacy 
+recode(energy.raw$EL1, "1" = "1", "2" = "0", "3" = "1", "4" = "1")
+recode(energy.raw$EL2, "1" = "1", "2" = "1", "3" = "0", "4" = "1")
+recode(energy.raw$EL3, "1" = "1", "2" = "1", "3" = "1", "4" = "0", "5" = "0" ) 
+
+
+## Energy and Health 
+recode(energy.raw$EH1a_er1a,  "1" = "0", "2" = "0", "3" = "0", "4" = "1", "5" = "1" ) 
+recode(energy.raw$EH1a_er2b,  "1" = "0", "2" = "0", "3" = "0", "4" = "1", "5" = "1" ) 
+recode(energy.raw$EH1a_er3c,  "1" = "0", "2" = "0", "3" = "0", "4" = "1", "5" = "1" )
+recode(energy.raw$EH1a_er4d,  "1" = "0", "2" = "0", "3" = "0", "4" = "1", "5" = "1" ) 
+recode(energy.raw$EH1a_er5e,  "1" = "0", "2" = "0", "3" = "0", "4" = "1", "5" = "1" )
+
+
+ei_df =  energy.raw %>% 
+  select(-c(EH2_1r1:FI4)) %>% 
+  select(-c(record:qtime)) 
+  
+## Write out recoded data   
+write.csv(ei_df, "./recode.csv") 
+
+```
+
